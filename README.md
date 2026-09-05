@@ -5,7 +5,7 @@ A secure, user-authenticated academic credential archive and reflective assistan
 ---
 ## 🚀 Live Application
 
-- **Live Cloud Run URL:** [https://academic-kiki-vault-ai.ai.studio](https://academic-kiki-vault-ai.ai.studio)
+- **Live Cloud Run URL:** [https://academic-vault-ai-1079059256760.us-central1.run.app/](https://academic-vault-ai-1079059256760.us-central1.run.app/)
 - **Service Name:** `academic-vault-ai`
 - **Verification Label:** `dev-tutorial: cloud-run-ai-challenge`
 
