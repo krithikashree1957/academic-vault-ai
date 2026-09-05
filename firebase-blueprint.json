@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "UserInteraction": {
+      "title": "UserInteraction",
+      "description": "User journal entry and multi-turn AI reflection",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "reflectionMode": { "type": "string" },
+        "messages": { "type": "array" },
+        "summary": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "createdAt", "updatedAt"]
+    },
+    "AcademicDocument": {
+      "title": "AcademicDocument",
+      "description": "Extracted structured academic or credential metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "documentType": {
+          "type": "string",
+          "enum": ["Marksheet", "Degree", "Certificate", "Other"]
+        },
+        "issuingInstitution": { "type": "string" },
+        "dateOfIssuance": { "type": "string" },
+        "awardLocation": { "type": "string" },
+        "keyMetrics": { "type": "object" },
+        "summary": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileType": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "userId",
+        "documentType",
+        "issuingInstitution",
+        "summary",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/interactions/{interactionId}": {
+      "schema": "UserInteraction",
+      "description": "User isolated reflection sessions"
+    },
+    "/users/{userId}/documents/{documentId}": {
+      "schema": "AcademicDocument",
+      "description": "User isolated academic documents and extracted credential metadata"
+    }
+  }
+}

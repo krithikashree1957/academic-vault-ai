@@ -1,0 +1,7 @@
+{
+  "name": "Academic Vault AI",
+  "description": "User-authenticated academic vault and reflection assistant with structured document extraction, verified credential management, and citation-backed Gemini AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
