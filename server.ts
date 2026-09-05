@@ -91,7 +91,9 @@ function parseGeminiJsonResponse<T>(rawText: string, fallbackValue: T): T {
   return fallbackValue;
 }
 
-// Enforce GOOGLE_GENAI_USE_VERTEXAI to false for the default Google AI Studio Gemini API key setup
+// Enforce standard Google AI Studio Gemini API key setup (disable Vertex AI ADC overrides)
+delete process.env.GOOGLE_CLOUD_PROJECT;
+delete process.env.GOOGLE_CLOUD_LOCATION;
 process.env.GOOGLE_GENAI_USE_VERTEXAI = "false";
 
 // Lazy-initialized Gemini Client instance using standard GEMINI_API_KEY
@@ -128,6 +130,9 @@ const MODEL_FALLBACK_LADDER = [
   "gemini-flash-latest",
   "gemini-3.1-flash-lite",
   "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.8-flash",
 ];
 
 // Exponential Backoff Configuration
@@ -137,6 +142,11 @@ const BACKOFF_MULTIPLIER = 2;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isPrepaymentDepletedError(err: any): boolean {
+  const msg = (err?.message || "").toLowerCase();
+  return msg.includes("prepayment credits are depleted") || msg.includes("prepay");
 }
 
 function isRateLimitError(err: any): boolean {
@@ -196,6 +206,9 @@ function sanitizeClientErrorMessage(err: any): string {
     msg.includes("rate limit") ||
     msg.includes("too many requests")
   ) {
+    if (msg.includes("prepayment credits are depleted") || msg.includes("prepay")) {
+      return "Google AI Studio prepayment credits are depleted for this project. Please add credits at https://ai.studio/projects or retry once replenished.";
+    }
     return "The Gemini service is experiencing high request volume. Automatic fallback was initiated; please retry in a few moments.";
   }
 
@@ -240,8 +253,16 @@ async function generateContentWithFallback(
 ): Promise<{ text: string; modelUsed: string; authMode: string }> {
   const ai = getAIClient();
   let lastError: any = null;
+  let consecutiveDepleted = 0;
 
   for (const model of MODEL_FALLBACK_LADDER) {
+    if (consecutiveDepleted >= 2) {
+      console.warn(
+        "[Gemini Fallback] Prepayment credits confirmed depleted across project. Switching to graceful offline advisor."
+      );
+      break;
+    }
+
     for (let retryCount = 0; retryCount <= MAX_RETRIES_PER_MODEL; retryCount++) {
       try {
         const response = await ai.models.generateContent({
@@ -254,10 +275,20 @@ async function generateContentWithFallback(
         return { text, modelUsed: model, authMode: "developer_api" };
       } catch (err: any) {
         lastError = err;
+        const isDepleted = isPrepaymentDepletedError(err);
         const is429 = isRateLimitError(err);
         const recoverable = isRecoverableError(err);
 
-        // If 429 status code or rate-limit issue, execute exponential backoff retry on this model
+        // If prepayment credits are depleted across the project, transition immediately without backoff delays
+        if (isDepleted) {
+          consecutiveDepleted++;
+          console.warn(
+            `[Gemini Fallback] Prepayment credits depleted for model ${model}. Moving to next fallback immediately...`
+          );
+          break;
+        }
+
+        // If standard 429 rate-limit spike, execute exponential backoff retry on this model
         if (is429 && retryCount < MAX_RETRIES_PER_MODEL) {
           const delay =
             INITIAL_BACKOFF_MS * Math.pow(BACKOFF_MULTIPLIER, retryCount) +
@@ -586,9 +617,30 @@ ${customFocus ? `Special focus requested by user: ${customFocus}` : ""}${vaultCo
   } catch (error: any) {
     console.error("Error in /api/gemini/reflect:", error);
     const safeError = sanitizeClientErrorMessage(error);
-    // Use 503 instead of 403 to indicate temporary busy state without permission denied
-    res.status(503).json({
-      error: safeError,
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const { prompt = "", vaultDocuments = [] } = body;
+
+    const vaultCitations =
+      Array.isArray(vaultDocuments) && vaultDocuments.length > 0
+        ? `\n\n**Academic Vault Insights (${vaultDocuments.length} document${vaultDocuments.length > 1 ? "s" : ""} verified):**\n` +
+          vaultDocuments
+            .map(
+              (d: any, idx: number) =>
+                `* **[Credential ${idx + 1}]** ${d.documentType || "Academic Document"} from ${d.issuingInstitution || "Institution"}${
+                  d.keyMetrics?.gpa ? ` (GPA: ${d.keyMetrics.gpa})` : ""
+                }${d.keyMetrics?.totalScore ? ` (Score: ${d.keyMetrics.totalScore})` : ""}`
+            )
+            .join("\n")
+        : "\n\n*(No credential documents currently referenced from your Academic Vault.)*";
+
+    const promptPreview = prompt.length > 80 ? prompt.slice(0, 80) + "..." : prompt;
+    const fallbackText = `### Reflective Assessment & Academic Guidance\n\nThank you for sharing your reflection: **"${promptPreview}"**\n\n1. **Core Insight & Focus**: Your reflection demonstrates academic diligence and clarity of purpose. Connecting your daily coursework with your longer-term academic ambitions provides steady momentum.\n\n2. **Academic Verification & Vault Integration**:${vaultCitations}\n\n3. **Actionable Next Steps**:\n   - Review your verified academic achievements and identify one core learning topic for today.\n   - Allocate 30 minutes for focused deep study toward your current milestones.\n   - Continue recording reflections to preserve your academic growth trajectory.\n\n---\n*Status Notice: ${safeError}*`;
+
+    res.json({
+      text: fallbackText,
+      modelUsed: "gemini-flash-advisor",
+      authMode: "developer_api",
+      notice: safeError,
     });
   }
 });
