@@ -38,7 +38,8 @@ The application strictly implements defense-in-depth across the 5 Threat Zones:
      run.googleapis.com \
      secretmanager.googleapis.com \
      firestore.googleapis.com \
-     cloudbuild.googleapis.com
+     cloudbuild.googleapis.com \
+     aiplatform.googleapis.com
    ```
 
 ---
@@ -93,16 +94,17 @@ firebase deploy --only firestore:rules
 
 ## 5. Google Cloud Run Deployment Flow
 
-Build and deploy the application container to Cloud Run:
+Build and deploy the application container to Cloud Run. With `GOOGLE_CLOUD_PROJECT` provided, API calls authenticate via Application Default Credentials (ADC) and bill directly against your linked Google Cloud project credits:
 
 ```bash
-# Build and deploy service
+# Build and deploy service with Vertex AI billing and Secret Manager fallback
 gcloud run deploy academic-vault-ai \
   --source . \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \
   --port 3000 \
+  --set-env-vars GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_LOCATION=us-central1 \
   --set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest
 ```
 

@@ -16,6 +16,7 @@ export interface ReflectionRequestOptions {
 export interface ReflectionResponse {
   text: string;
   modelUsed: string;
+  authMode?: string;
 }
 
 export interface ExtractDocumentPayload {
@@ -27,6 +28,7 @@ export interface ExtractDocumentPayload {
 export interface ExtractDocumentResponse {
   data: ExtractedDocumentData;
   modelUsed: string;
+  authMode?: string;
 }
 
 /**

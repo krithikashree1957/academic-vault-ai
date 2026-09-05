@@ -91,26 +91,155 @@ function parseGeminiJsonResponse<T>(rawText: string, fallbackValue: T): T {
   return fallbackValue;
 }
 
-// Lazy-initialized Gemini Client
-let aiClient: GoogleGenAI | null = null;
-function getAIClient(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY environment variable is not configured. Please set it in Settings.");
-    }
-    aiClient = new GoogleGenAI({ apiKey });
-  }
-  return aiClient;
+// Types for client configuration
+interface GeminiClientContext {
+  client: GoogleGenAI;
+  authMode: "vertexai_adc" | "developer_api";
+  projectId?: string;
+  location?: string;
 }
 
-// Resilient Model Fallback Ladder
+// Lazy-initialized Gemini Client instances
+let activeClientCtx: GeminiClientContext | null = null;
+let fallbackApiKeyClient: GoogleGenAI | null = null;
+
+/**
+ * Resolves the Google Gen AI client.
+ * Prioritizes GOOGLE_CLOUD_PROJECT with Application Default Credentials (ADC)
+ * so requests bill directly against linked Google Cloud Project credits.
+ * Gracefully falls back to GEMINI_API_KEY if Vertex credentials are unavailable.
+ */
+function getAIClient(): GeminiClientContext {
+  if (!activeClientCtx) {
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
+    const location = process.env.GOOGLE_CLOUD_LOCATION || process.env.VERTEX_LOCATION || "us-central1";
+    const useVertex =
+      Boolean(projectId) ||
+      process.env.GOOGLE_GENAI_USE_VERTEXAI === "true" ||
+      process.env.GOOGLE_GENAI_USE_ENTERPRISE === "true";
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (useVertex && projectId) {
+      console.log(
+        `[Gemini Config] Initializing GoogleGenAI with Google Cloud Vertex AI ADC (Project: ${projectId}, Location: ${location})`
+      );
+      try {
+        const client = new GoogleGenAI({
+          vertexai: true,
+          project: projectId,
+          location: location,
+          httpOptions: {
+            headers: {
+              "User-Agent": "aistudio-build",
+            },
+          },
+        });
+        activeClientCtx = {
+          client,
+          authMode: "vertexai_adc",
+          projectId,
+          location,
+        };
+      } catch (vertexErr: any) {
+        console.warn("[Gemini Config] Vertex AI initialization failed, falling back to API key:", vertexErr?.message || vertexErr);
+      }
+    }
+
+    if (!activeClientCtx) {
+      if (!apiKey && !projectId) {
+        throw new Error(
+          "Neither GOOGLE_CLOUD_PROJECT (Application Default Credentials) nor GEMINI_API_KEY is configured."
+        );
+      }
+      console.log("[Gemini Config] Initializing GoogleGenAI client with Developer API Key");
+      activeClientCtx = {
+        client: new GoogleGenAI({
+          apiKey: apiKey || "",
+          httpOptions: {
+            headers: {
+              "User-Agent": "aistudio-build",
+            },
+          },
+        }),
+        authMode: "developer_api",
+      };
+    }
+  }
+  return activeClientCtx;
+}
+
+/**
+ * Returns a fallback Developer API Key client in case Vertex AI ADC hits unauthenticated / permission rejection.
+ */
+function getSecondaryApiKeyClient(): GoogleGenAI | null {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  if (!fallbackApiKeyClient) {
+    fallbackApiKeyClient = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
+      },
+    });
+  }
+  return fallbackApiKeyClient;
+}
+
+// Resilient Model Fallback Ladder prioritizing lighter Flash models to resolve rate-limits
 const MODEL_FALLBACK_LADDER = [
-  "gemini-3.6-flash",
+  "gemini-2.5-flash",
   "gemini-3.1-flash-lite",
   "gemini-flash-latest",
+  "gemini-3.6-flash",
+  "gemini-1.5-flash",
   "gemini-3.7-flash",
 ];
+
+// Exponential Backoff Configuration
+const MAX_RETRIES_PER_MODEL = 3;
+const INITIAL_BACKOFF_MS = 1000;
+const BACKOFF_MULTIPLIER = 2;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRateLimitError(err: any): boolean {
+  const status = err?.status || err?.statusCode || 0;
+  const msg = (err?.message || "").toLowerCase();
+  return (
+    status === 429 ||
+    msg.includes("429") ||
+    msg.includes("resource_exhausted") ||
+    msg.includes("quota exceeded") ||
+    msg.includes("rate limit") ||
+    msg.includes("too many requests")
+  );
+}
+
+function isRecoverableError(err: any): boolean {
+  if (isRateLimitError(err)) return true;
+  const status = err?.status || err?.statusCode || 0;
+  const msg = (err?.message || "").toLowerCase();
+  return (
+    status === 503 ||
+    status === 500 ||
+    status === 502 ||
+    status === 504 ||
+    status === 404 ||
+    msg.includes("unavailable") ||
+    msg.includes("overloaded") ||
+    msg.includes("not found") ||
+    msg.includes("internal error") ||
+    msg.includes("service unavailable") ||
+    msg.includes("bad gateway") ||
+    msg.includes("gateway timeout") ||
+    msg.includes("unsupported") ||
+    msg.includes("deprecated")
+  );
+}
 
 interface FallbackOptions {
   contents: any;
@@ -123,48 +252,98 @@ interface FallbackOptions {
   };
 }
 
-async function generateContentWithFallback(options: FallbackOptions): Promise<{ text: string; modelUsed: string }> {
-  const ai = getAIClient();
+/**
+ * Wraps content generation with:
+ * 1. Default Application Credentials / Vertex AI billing against GOOGLE_CLOUD_PROJECT
+ * 2. Exponential backoff retry logic specifically handling 429 RESOURCE_EXHAUSTED errors
+ * 3. Graceful fallback ladder prioritizing lighter Flash models (gemini-2.5-flash, gemini-3.1-flash-lite, etc.)
+ */
+async function generateContentWithFallback(
+  options: FallbackOptions
+): Promise<{ text: string; modelUsed: string; authMode: string }> {
+  let ctx = getAIClient();
+  let currentClient = ctx.client;
+  let currentAuthMode = ctx.authMode;
   let lastError: any = null;
 
   for (const model of MODEL_FALLBACK_LADDER) {
-    try {
-      const response = await ai.models.generateContent({
-        model,
-        contents: options.contents,
-        config: options.config,
-      });
+    for (let retryCount = 0; retryCount <= MAX_RETRIES_PER_MODEL; retryCount++) {
+      try {
+        const response = await currentClient.models.generateContent({
+          model,
+          contents: options.contents,
+          config: options.config,
+        });
 
-      const text = response.text || "";
-      return { text, modelUsed: model };
-    } catch (err: any) {
-      lastError = err;
-      const status = err?.status || err?.statusCode || (err?.message?.includes("429") ? 429 : 0);
-      const isRecoverable =
-        status === 429 ||
-        status === 503 ||
-        status === 500 ||
-        status === 404 ||
-        err?.message?.toLowerCase().includes("unavailable") ||
-        err?.message?.toLowerCase().includes("quota") ||
-        err?.message?.toLowerCase().includes("not found") ||
-        err?.message?.toLowerCase().includes("overloaded");
+        const text = response.text || "";
+        return { text, modelUsed: model, authMode: currentAuthMode };
+      } catch (err: any) {
+        lastError = err;
 
-      console.warn(`Model ${model} failed with: ${err?.message || err}. Recoverable: ${isRecoverable}`);
-      if (!isRecoverable && MODEL_FALLBACK_LADDER.indexOf(model) === MODEL_FALLBACK_LADDER.length - 1) {
+        // If Vertex AI ADC fails with authentication error (e.g. no ADC in container environment), try fallback to GEMINI_API_KEY
+        if (
+          currentAuthMode === "vertexai_adc" &&
+          (err?.message?.toLowerCase().includes("could not load the default credentials") ||
+            err?.message?.toLowerCase().includes("credentials") ||
+            err?.message?.toLowerCase().includes("unauthenticated") ||
+            err?.code === "UNAUTHENTICATED")
+        ) {
+          const secondary = getSecondaryApiKeyClient();
+          if (secondary) {
+            console.warn(
+              `[ADC Fallback] Vertex ADC authentication failed (${err?.message}). Seamlessly failing over to GEMINI_API_KEY client.`
+            );
+            currentClient = secondary;
+            currentAuthMode = "developer_api";
+            // Retry immediately on the secondary client
+            continue;
+          }
+        }
+
+        const is429 = isRateLimitError(err);
+        const recoverable = isRecoverableError(err);
+
+        // If 429 status code, perform exponential backoff retry on this model
+        if (is429 && retryCount < MAX_RETRIES_PER_MODEL) {
+          const delay =
+            INITIAL_BACKOFF_MS * Math.pow(BACKOFF_MULTIPLIER, retryCount) +
+            Math.floor(Math.random() * 300);
+          console.warn(
+            `[429 Backoff] Rate limit on model ${model} (attempt ${retryCount + 1}/${MAX_RETRIES_PER_MODEL + 1}). Retrying in ${delay}ms with exponential backoff...`
+          );
+          await sleep(delay);
+          continue; // Retry with the same model
+        }
+
+        console.warn(
+          `[Model Fallback] Model ${model} failed (attempt ${retryCount + 1}): ${err?.message || err}. Recoverable: ${recoverable}`
+        );
+
+        // If not a 429 retry, or if retries exhausted on this model, step to next lighter model in ladder
         break;
       }
     }
   }
 
-  throw new Error(lastError?.message || "All models in the fallback ladder failed to generate content.");
+  throw new Error(
+    `All models in fallback ladder failed. Last error: ${lastError?.message || "RESOURCE_EXHAUSTED"}`
+  );
 }
 
 // Health check route
 app.get("/api/health", (_req: Request, res: Response) => {
+  const projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
+  const location = process.env.GOOGLE_CLOUD_LOCATION || process.env.VERTEX_LOCATION || "us-central1";
   res.json({
     status: "ok",
     hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
+    googleCloudProject: projectId || null,
+    location,
+    vertexAIEnabled: Boolean(projectId || process.env.GOOGLE_GENAI_USE_VERTEXAI === "true"),
+    activeAuthMode: projectId ? "vertexai_adc" : (process.env.GEMINI_API_KEY ? "developer_api" : "none"),
+    fallbackModels: MODEL_FALLBACK_LADDER,
+    maxRetriesPerModel: MAX_RETRIES_PER_MODEL,
+    backoffBaseMs: INITIAL_BACKOFF_MS,
     timestamp: new Date().toISOString(),
   });
 });
@@ -314,6 +493,7 @@ Rules:
     res.json({
       data: normalizedData,
       modelUsed: result.modelUsed,
+      authMode: result.authMode,
     });
   } catch (error: any) {
     console.error("Error in /api/gemini/extract-document:", error);
@@ -422,6 +602,7 @@ ${customFocus ? `Special focus requested by user: ${customFocus}` : ""}${vaultCo
     res.json({
       text: result.text,
       modelUsed: result.modelUsed,
+      authMode: result.authMode,
     });
   } catch (error: any) {
     console.error("Error in /api/gemini/reflect:", error);
@@ -503,6 +684,7 @@ Return ONLY valid JSON with no backticks, or Markdown codeblock fences if needed
         : defaultSummary.keyTakeaways,
       actionStep: String(parsed.actionStep || defaultSummary.actionStep),
       modelUsed: result.modelUsed,
+      authMode: result.authMode,
     });
   } catch (error: any) {
     console.error("Error in /api/gemini/summarize:", error);
