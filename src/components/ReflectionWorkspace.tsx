@@ -7,6 +7,7 @@ import {
 } from "../types";
 import { SummaryCard } from "./SummaryCard";
 import { ErrorBanner } from "./ErrorBanner";
+import { WelcomeBanner } from "./WelcomeBanner";
 import {
   Send,
   Sparkles,
@@ -460,6 +461,17 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
         id="messages-scroll-area"
         className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6"
       >
+        {/* Clean Welcome Banner & Feature Overview */}
+        <WelcomeBanner
+          onTriggerUpload={() => fileInputRef.current?.click()}
+          onOpenVault={onOpenVault}
+          vaultCount={vaultDocumentCount}
+          onSelectStarterPrompt={(promptText) => {
+            setInputText(promptText);
+            textareaRef.current?.focus();
+          }}
+        />
+
         {/* Gemini Summary Card if available */}
         {interaction.summary && (
           <div className="max-w-3xl mx-auto">
@@ -467,19 +479,15 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
           </div>
         )}
 
-        {/* Empty State / Welcome */}
+        {/* Empty State / Starter Prompts */}
         {interaction.messages.length === 0 ? (
-          <div className="max-w-xl mx-auto text-center py-8 px-4 space-y-6">
-            <div className="space-y-2">
-              <div className="inline-flex p-3 rounded-2xl bg-[#F4EFEB] border border-[#E8E4DF] text-[#8B735B] shadow-2xs mb-2">
-                <Award className="w-6 h-6" />
-              </div>
-              <h3 className="text-xl font-serif font-bold text-[#2C2C2C]">
-                Welcome to Academic Vault AI
+          <div className="max-w-2xl mx-auto text-center py-4 px-4 space-y-5">
+            <div className="space-y-1.5">
+              <h3 className="text-base font-serif font-semibold text-[#2C2C2C]">
+                Start an Academic Reflection Session
               </h3>
               <p className="text-xs text-[#736E68] leading-relaxed max-w-md mx-auto">
-                Upload your transcripts, marksheets, or certificates for structured extraction.
-                Or write freely to reflect on your academic journey and career aspirations.
+                Select a recommended inquiry below, inquire about records in your vault, or upload a transcript.
               </p>
             </div>
 

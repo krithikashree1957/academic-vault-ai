@@ -1,6 +1,6 @@
 import React from "react";
 import { User } from "firebase/auth";
-import { Sparkles, LogOut, ShieldCheck, Database } from "lucide-react";
+import { Sparkles, LogOut, ShieldCheck, Database, Award } from "lucide-react";
 
 interface NavbarProps {
   user: User | null;
@@ -22,12 +22,12 @@ export const Navbar: React.FC<NavbarProps> = ({
     >
       <div className="flex items-center gap-3">
         <div className="h-9 w-9 rounded-xl bg-[#F4EFEB] border border-[#E8E4DF] flex items-center justify-center text-[#8B735B] shadow-2xs">
-          <Sparkles className="w-5 h-5" />
+          <Award className="w-5 h-5" />
         </div>
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-base sm:text-lg font-serif font-semibold tracking-tight text-[#2C2C2C]">
-              AI Journal &amp; Reflections
+              Academic Vault AI
             </h1>
             <span
               id="model-badge"
@@ -39,7 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </div>
           <p className="text-xs text-[#736E68] hidden sm:block">
-            User-isolated private reflections with Firestore &amp; Gemini
+            Intelligent Credential Archive &amp; Citation-Grounded AI Advisory
           </p>
         </div>
       </div>
