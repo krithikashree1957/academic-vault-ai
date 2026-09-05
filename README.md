@@ -1,8 +1,58 @@
 # Academic Vault AI: Secure Cloud Run Application
 
-A secure, user-authenticated academic credential archive and reflective assistant built with **Gemini 3.6 Flash**, **Cloud Firestore**, and **Firebase Authentication**. Features structured multimodal credential extraction (marksheets, degrees, certificates), editable metadata verification, owner-isolated vault persistence, and citation-backed academic dialogue.
+A secure, user-authenticated academic credential archive and reflective assistant built with **Gemini 3.6 Flash**, **Cloud Firestore**, and **Firebase Authentication**. Features structured multimodal document parsing (PDF/Images), structured JSON extraction, owner-bound Firestore security, and citation-grounded conversational chat.
 
 ---
+
+## 📋 Product Requirements Summary (PRD)
+
+### Problem
+Students and professionals struggle to quickly find, verify, and query specific marks, GPA, and conferral dates across fragmented academic PDFs and image scans.
+
+### Target Audience
+- Students managing degree certificates and transcripts
+- Academic advisors verifying credentials
+- Job applicants consolidating multiple qualifications
+
+### Core Value Proposition
+Converts static academic documents into structured JSON data schemas and provides a private, citation-backed AI assistant for grounded Q&A.
+
+### Key Features
+1. **Federated Sign-In:** Secure Google OAuth via Firebase Authentication.
+2. **Multimodal Parsing:** Instant extraction of GPA, major, institution, and honors using Gemini Flash.
+3. **Verification Modal:** Interactive form allowing users to review and correct parsed JSON metadata before saving.
+4. **Citation-Grounded Chat:** Conversational queries backed by explicit source citations.
+5. **Data Privacy:** Owner-isolated Cloud Firestore database rules (`request.auth.uid == userId`).
+
+---
+
+## 🏗️ System Architecture
+
+```mermaid
+graph TD
+    %% User & Client Interface
+    User[User / Web Browser] -->|1. Authenticates via Google OAuth| Auth[Firebase Auth]
+    User -->|2. Uploads Academic PDF/Image| Server[Cloud Run Backend Node.js]
+
+    %% AI Engine & Extraction
+    subgraph AI Engine & Processing
+        Server -->|3. Multimodal Parsing & JSON Schema| Gemini[Gemini 2.5 Flash API]
+        Gemini -->|4. Structured JSON Payload| Server
+    end
+
+    %% Storage & Security
+    subgraph Persistent Storage
+        Server -->|5. Store Document & Citations| Firestore[(Cloud Firestore)]
+        Auth -.->|Owner-Bound Security Rules: request.auth.uid == userId| Firestore
+    end
+
+    %% Interaction Loop
+    Firestore -->|6. Grounded Q&A Retrieval| Server
+    Server -->|7. Citation Badges & Response| User
+```
+
+---
+
 ## 🚀 Live Application
 
 - **Live Cloud Run URL:** [https://academic-vault-ai-1079059256760.us-central1.run.app/](https://academic-vault-ai-1079059256760.us-central1.run.app/)
@@ -15,11 +65,11 @@ The application strictly implements defense-in-depth across the 5 Threat Zones:
 
 | Threat Zone | Identified Risks | Implementation Countermeasures |
 | :--- | :--- | :--- |
-| **Input Surfaces** | Malformed prompts, oversized file uploads (PDF/images), injection attacks. | Strict 25MB body payload bounds, schema destructuring, MIME validation (`application/pdf`, `image/*`), and zero-crash undefined-stripping sanitization before database persistence. |
-| **Planning & Reasoning** | Indirect prompt injection via parsed document text or malicious file payloads. | Unstrusted text in marksheets/degrees treated as plain data. Gemini instructed to adhere to strict JSON `responseSchema` during extraction. Conversational RAG grounded strictly in verified document metadata. |
-| **Tool Execution & API** | Secret leakage, SSRF, quota exhaustion. | Server-side route isolation (`/api/gemini/extract-document`, `/api/gemini/reflect`, `/api/gemini/summarize`); `GEMINI_API_KEY` never sent to client; resilient fallback ladder (`gemini-3.6-flash` -> `gemini-3.1-flash-lite` -> `gemini-flash-latest` -> `gemini-3.7-flash`). |
-| **Memory & State** | Cross-user data leakage, session tampering. | Owner-bound Firestore security rules (`request.auth.uid == userId`) restricting all read/write operations to `/users/{userId}/interactions` and `/users/{userId}/documents`. |
-| **Inter-System Communication** | Token interception, plain-text credential leaks. | Federated Google Sign-In via Firebase Auth (no password storage); Google Secret Manager runtime injection for operational keys. |
+| **Input Surfaces** | Malformed prompts, oversized file uploads (PDF/images), injection attacks. | Strict 25MB body payload bounds, schema destructuring, MIME validation (`application/pdf`, `image/*`). |
+| **Planning & Reasoning** | Indirect prompt injection via parsed document text or malicious file payloads. | Unstrusted text in marksheets/degrees treated as plain data. Gemini instructed to adhere to structured JSON output without injected instructions. |
+| **Tool Execution & API** | Secret leakage, SSRF, quota exhaustion. | Server-side route isolation (`/api/gemini/extract-document`, `/api/gemini/reflect`, `//api/gemini/summarize`); `GEMINI_API_KEY` stored in Google Secret Manager, never logged. |
+| **Memory & State** | Cross-user data leakage, session tampering. | Owner-bound Firestore security rules (`request.auth.uid == userId`) restricting all read/write operations to `/users/{userId}/interactions/` and `/users/{userId}/documents/`. Firebase Auth token server-side validation. |
+| **Inter-System Communication** | Token interception, plain-text credential leaks. | Federated Google Sign-In via Firebase Auth (no password storage); Google Secret Manager runtime injection for API keys; HTTPS enforced on Cloud Run. |
 
 ---
 
@@ -94,7 +144,7 @@ firebase deploy --only firestore:rules
 
 ## 5. Google Cloud Run Deployment Flow
 
-Build and deploy the application container to Cloud Run using the standard Google AI Studio Gemini API key setup (with `GOOGLE_GENAI_USE_VERTEXAI=false` and standard Gemini Flash models `gemini-2.5-flash` / `gemini-1.5-flash`):
+Build and deploy the application container to Cloud Run using the standard Google AI Studio Gemini API key setup (with `GOOGLE_GENAI_USE_VERTEXAI=false` and standard Gemini Flash models `gemini-2.5-flash`):
 
 ```bash
 # Build and deploy service with Google AI Studio GEMINI_API_KEY
@@ -164,7 +214,7 @@ gcloud run services update academic-vault-ai \
 
 ## 🏆Ideathon Submission
 
-Built for the **Google Cloud Run AI Challenge / Ideathon**, demonstrating full-stack serverless deployment, structured multimodal extraction with Gemini 3.6 Flash, and secure user-authenticated AI workflows.
+Built for the **Google Cloud Run AI Challenge / Ideathon**, demonstrating full-stack serverless deployment, structured multimodal extraction with Gemini 3.6 Flash, and secure user-authenticated AI-driven academic credential management.
 
 ---
 
