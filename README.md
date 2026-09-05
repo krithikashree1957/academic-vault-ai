@@ -94,17 +94,17 @@ firebase deploy --only firestore:rules
 
 ## 5. Google Cloud Run Deployment Flow
 
-Build and deploy the application container to Cloud Run. With `GOOGLE_CLOUD_PROJECT` provided, API calls authenticate via Application Default Credentials (ADC) and bill directly against your linked Google Cloud project credits:
+Build and deploy the application container to Cloud Run using the standard Google AI Studio Gemini API key setup (with `GOOGLE_GENAI_USE_VERTEXAI=false` and standard Gemini Flash models `gemini-2.5-flash` / `gemini-1.5-flash`):
 
 ```bash
-# Build and deploy service with Vertex AI billing and Secret Manager fallback
+# Build and deploy service with Google AI Studio GEMINI_API_KEY
 gcloud run deploy academic-vault-ai \
   --source . \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \
   --port 3000 \
-  --set-env-vars GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_LOCATION=us-central1 \
+  --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=false \
   --set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest
 ```
 

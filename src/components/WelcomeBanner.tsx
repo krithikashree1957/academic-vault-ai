@@ -65,7 +65,7 @@ export const WelcomeBanner: React.FC<WelcomeBannerProps> = ({
                   Academic Vault AI
                 </h1>
                 <span className="px-2 py-0.5 rounded-full bg-[#8B735B]/15 text-[#755F4A] text-[11px] font-medium font-sans">
-                  Gemini 3.6 Flash &bull; Cloud Firestore
+                  Gemini 2.5 Flash &bull; Cloud Firestore
                 </span>
               </div>
               <p className="text-xs text-[#736E68] mt-1 leading-relaxed max-w-2xl">

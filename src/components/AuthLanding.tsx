@@ -57,7 +57,7 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onSignIn, isLoading })
                   Academic Vault AI
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full bg-[#8B735B]/15 text-[#755F4A] text-xs font-medium font-sans">
-                  Gemini 3.6 Flash &bull; Cloud Firestore
+                  Gemini 2.5 Flash &bull; Cloud Firestore
                 </span>
               </div>
               <p className="text-sm sm:text-base text-[#736E68] max-w-xl mx-auto font-sans leading-relaxed">

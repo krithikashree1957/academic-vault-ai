@@ -57,7 +57,7 @@ export default function App() {
   // AI Generation state
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
-  const [activeModel, setActiveModel] = useState("gemini-3.6-flash");
+  const [activeModel, setActiveModel] = useState("gemini-2.5-flash");
 
   // Mobile sidebar open state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);

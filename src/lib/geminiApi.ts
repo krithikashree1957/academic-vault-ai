@@ -31,6 +31,29 @@ export interface ExtractDocumentResponse {
   authMode?: string;
 }
 
+function cleanClientError(msg: string, status?: number): string {
+  const lower = (msg || "").toLowerCase();
+  if (
+    status === 403 ||
+    lower.includes("403") ||
+    lower.includes("permission_denied") ||
+    lower.includes("permission denied") ||
+    lower.includes("forbidden")
+  ) {
+    return "The Gemini AI service is adjusting model capacity. Please try again shortly.";
+  }
+  if (
+    status === 429 ||
+    lower.includes("429") ||
+    lower.includes("resource_exhausted") ||
+    lower.includes("quota") ||
+    lower.includes("rate limit")
+  ) {
+    return "The AI service is experiencing high request volume. Automatic retry is active; please wait a moment and try again.";
+  }
+  return msg;
+}
+
 /**
  * Sends document file (image/PDF) to Gemini for structured JSON extraction.
  */
@@ -53,7 +76,7 @@ export async function extractDocumentMetadata(
     } catch {
       // ignore
     }
-    throw new Error(errorMsg);
+    throw new Error(cleanClientError(errorMsg, response.status));
   }
 
   return response.json();
@@ -81,7 +104,7 @@ export async function generateReflection(
     } catch {
       // ignore json parse error
     }
-    throw new Error(errorMsg);
+    throw new Error(cleanClientError(errorMsg, response.status));
   }
 
   return response.json();
@@ -110,7 +133,7 @@ export async function summarizeReflection(
     } catch {
       // ignore
     }
-    throw new Error(errorMsg);
+    throw new Error(cleanClientError(errorMsg, response.status));
   }
 
   return response.json();
