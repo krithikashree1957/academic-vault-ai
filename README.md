@@ -3,6 +3,11 @@
 A secure, user-authenticated academic credential archive and reflective assistant built with **Gemini 3.6 Flash**, **Cloud Firestore**, and **Firebase Authentication**. Features structured multimodal credential extraction (marksheets, degrees, certificates), editable metadata verification, owner-isolated vault persistence, and citation-backed academic dialogue.
 
 ---
+## 🚀 Live Application
+
+- **Live Cloud Run URL:** [https://academic-kiki-vault-ai.ai.studio](https://academic-kiki-vault-ai.ai.studio)
+- **Service Name:** `academic-vault-ai`
+- **Verification Label:** `dev-tutorial: cloud-run-ai-challenge`
 
 ## 1. System Architecture & Threat Model
 
@@ -153,3 +158,15 @@ gcloud run services update academic-vault-ai \
 2. Verify Gemini 3.6 Flash generates structured takeaways, sentiment analysis, and a recommended academic action.
 3. Click the **Download** icon to export the complete multi-turn reflection session as Markdown (`.md`).
 4. Sign out and log in with another account; verify complete data isolation.
+
+
+## 🏆Ideathon Submission
+
+Built for the **Google Cloud Run AI Challenge / Ideathon**, demonstrating full-stack serverless deployment, structured multimodal extraction with Gemini 3.6 Flash, and secure user-authenticated AI workflows.
+
+---
+
+## 👩‍💻 Author
+
+- **Name:** Krithika shree.K
+- **GitHub:** [@krithikashree1957](https://github.com/krithikashree1957)
